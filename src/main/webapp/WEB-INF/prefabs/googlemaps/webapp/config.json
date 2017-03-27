@@ -156,8 +156,9 @@
       "value": "400px"
     },
     "zoom": {
-      "type": "number",
+      "type": "list",
       "value": 5,
+      "options": [],
       "helpText": "This property is used to set the zoom level of the map"
     },
     "trafficlayer": {
@@ -173,6 +174,13 @@
       "show": false,
       "displayName": "Transit Layer",
       "helpText": "This property is used to enable real-time local transit information (where supported) to your maps"
+    },
+    "onClick": {
+      "type": "event",
+      "show": true,
+      "widget": "eventlist",
+      "helpText": "This event handler is called upon the click of map.",
+      "disabled": false
     },
     "refresh": {
       "type": "method",

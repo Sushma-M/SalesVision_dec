@@ -443,17 +443,31 @@ Application.$controller('GooglemapsController', ['$scope', 'Utils', '$element', 
                 Utils.triggerFn(_deregisterFns.directions);
 
                 //watch for the directions
-                _deregisterFns.directions = $s.$watch(':: maps[0].directionsRenderers[0]', function(nv) {
+                _deregisterFns.directions = $s.$watch(':: maps[0].directionsRenderers', function(nv) {
                     //if there are no directions return back. nv is undefined between page navigation in studio mode
                     if (!nv) {
                         return;
                     }
-                    if (nv.directions) {
-                        var routeDetails;
-                        routeDetails = nv.directions.routes[0].legs[0];
-                        $s.distance  = routeDetails.distance.text;
-                        $s.duration  = routeDetails.duration.text;
-                    }
+                    var directionsObj = nv,
+                        distance = 0,
+                        duration = 0;
+                    //iterate throughout the object as there might be multiple waypoints and directions on the map.
+                    _.forEach(directionsObj, function(direction) {
+                        var routes = _.get(direction, 'directions.routes');
+                        _.forEach(routes, function(route) {
+                            var legs = route.legs;
+                            _.forEach(legs, function(leg) {
+                                distance += _.get(leg, 'distance.value') || 0;
+                                duration += _.get(leg, 'duration.value') || 0;
+                            })
+                        });
+                    });
+
+                    distance = distance ? _.round(distance/1000, 2) : '';
+                    duration = duration ? _.round(duration/3600, 2) : '';
+
+                    $s.distance = distance;
+                    $s.duration = duration;
                 });
             }
         }
@@ -526,11 +540,14 @@ Application.$controller('GooglemapsController', ['$scope', 'Utils', '$element', 
         function mapTypeOperations(newVal) {
             if ($s.widgetid) {
                 var wp = $s.widgetProps,
-                    markerProps  = ['onMarkerclick', 'onMarkerhover', 'radius', 'shade', 'info', 'icon', 'markertype', 'locations', 'lat', 'lng'],
+                    markerProps  = ['onMarkerclick', 'onMarkerhover', 'onClick', 'radius', 'shade', 'info', 'icon', 'markertype', 'locations', 'lat', 'lng'],
                     heatmapProps = ['locations', 'lat', 'lng', 'gradient', 'pixeldensity', 'opacity'],
                     routeProps   = ['origin', 'destination', 'trafficlayer', 'transitlayer', 'travelmode', 'waypoints', 'stopover'],
                     commonProps  = ['name', 'tabindex', 'maptype', 'zoom', 'height', 'width', 'show', 'animation', 'onLoad', 'onDestroy', 'accessroles', 'class', 'margin', 'active', 'debugurl', 'showindevice'],
                     maptypeProps;
+
+                wp.zoom.options = ['Auto', 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+
                 if (newVal === 'Markers') {
                     wp.lat.displayName = 'Marker Latitude';
                     wp.lng.displayName = 'Marker Longitude';
@@ -642,7 +659,7 @@ Application.$controller('GooglemapsController', ['$scope', 'Utils', '$element', 
                     break;
                 case 'zoom':
                     if (!isNaN(newVal)) {
-                        $s.zoom = newVal;
+                        $s.zoomLevel = newVal >= 2 ? newVal : 2;
                     }
                     break;
                 case 'origin':
@@ -731,6 +748,37 @@ Application.$controller('GooglemapsController', ['$scope', 'Utils', '$element', 
                 evtMap.lastBounds = evtMap.getBounds();
                 toggleLoader(false);
             });
+            //this function places the marker based on the click event lat/lng values
+            function placeMarker(location) {
+                var marker = new google.maps.Marker({
+                    position: location,
+                    map: evtMap
+                });
+                evtMap.panTo(location);
+                google.maps.event.addListener(marker, 'click', function(event) {
+                    prefabScope.activeMarker = {
+                        'event' : event,
+                        'marker': marker
+                    };
+                    Utils.triggerFn($s.onMarkerClick.bind(event, event.latLng));
+                });
+            }
+            //if the onClick event is specified then add a active click listener on the map
+            if ($s.onClick) {
+                Utils.triggerFn(function() {
+                    google.maps.event.addListener(evtMap, 'click', function(event) {
+                        prefabScope.activeClick = {
+                            'event': event,
+                            'latLng': event.latLng
+                        };
+                        if ($s.addMarkerOnClick) {
+                            placeMarker(event.latLng);
+                        }
+                        Utils.triggerFn($s.onClick);
+                    });
+                });
+            }
+
             /*Necessary in order to set the map to idle state as adding heat map is only a layer
               but not the operation on the map.
             */
@@ -772,7 +820,7 @@ var _MainPage_Variables_ ={ }
 <wm-page name="googlemap" data-ng-controller="GooglemapsController">
     <wm-content name="googlemapview">
         <wm-spinner show="bind:isMapLoading" class="spinner-transparent"></wm-spinner>
-        <ng-map id="map" default-style="false" map-initialized="onMapLoad" class="full-height full-width" center="{{center}}" zoom="{{zoom}}" draggable="true">
+        <ng-map id="map" default-style="false" min-zoom="2" zoom-to-include-markers="{{zoom === 'Auto' ? 'auto' : false}}" map-initialized="onMapLoad" class="full-height full-width" center="{{center}}" zoom="{{zoomLevel || 5}}" draggable="true">
             <div ng-repeat="marker in markersData">
                 <marker position="{{marker.latlng}}" on-mouseover="onMarkerHover(event, marker)" on-click="onMarkerClick(event, marker)" icon="{{marker.iconData}}">
                 </marker>
